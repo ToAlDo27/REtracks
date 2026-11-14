@@ -1,0 +1,21 @@
+{
+  "name": "REtracks",
+  "description": "Synchronized music, editable audio and YouTube clips, bulk library import and browser tab audio broadcasting",
+  "version": "1.9.0",
+  "manifest_version": 1,
+  "icon": "/tracks_256.png",
+  "author": "Jordan Cohen",
+  "homepage_url": "https://github.com/ToAlDo27/REtracks",
+  "permissions": [
+    {
+      "name": "autoplay",
+      "reason": "Play synchronized room music and YouTube videos after listeners enable audio."
+    }
+  ],
+  "action": {
+    "title": "REtracks",
+    "icon": "/album_black_24dp.svg",
+    "popover": "/",
+    "width": 400
+  }
+}
