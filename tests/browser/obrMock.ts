@@ -1,15 +1,29 @@
 type Metadata = Record<string, unknown>
 type Handler<T> = (value: T) => void
+type Broadcast = { data: unknown; connectionId: string }
+type MockWindow = Window & {
+  __obrGetMetadata?: () => Promise<Metadata>
+  __obrSetMetadata?: (patch: Metadata) => Promise<void>
+  __obrBroadcast?: (channel: string, data: unknown) => Promise<void>
+}
+const transport = window as MockWindow
+const parameters = new URLSearchParams(location.search)
+const role = parameters.get("role") === "PLAYER" ? "PLAYER" : "GM"
+const connectionId = parameters.get("client") ?? "browser-test-gm"
 const metadataListeners = new Set<Handler<Metadata>>()
-const broadcastListeners = new Map<
-  string,
-  Set<Handler<{ data: unknown; connectionId: string }>>
->()
+const broadcastListeners = new Map<string, Set<Handler<Broadcast>>>()
 
 const state = {
   metadata: {} as Metadata,
   writes: [] as Metadata[],
   notifications: [] as string[],
+  receiveMetadata: (metadata: Metadata) => {
+    state.metadata = { ...metadata }
+    metadataListeners.forEach(callback => callback({ ...state.metadata }))
+  },
+  receiveBroadcast: (channel: string, message: Broadcast) => {
+    broadcastListeners.get(channel)?.forEach(callback => callback(message))
+  },
 }
 
 Object.assign(window, { __obrMock: state })
@@ -20,11 +34,15 @@ const OBR = {
   isAvailable: true,
   onReady: (callback: () => void) => queueMicrotask(callback),
   room: {
-    getMetadata: async () => ({ ...state.metadata }),
+    getMetadata: async () => {
+      if (transport.__obrGetMetadata)
+        state.metadata = await transport.__obrGetMetadata()
+      return { ...state.metadata }
+    },
     setMetadata: async (patch: Metadata) => {
-      state.metadata = { ...state.metadata, ...patch }
       state.writes.push(patch)
-      metadataListeners.forEach(callback => callback({ ...state.metadata }))
+      if (transport.__obrSetMetadata) await transport.__obrSetMetadata(patch)
+      else state.receiveMetadata({ ...state.metadata, ...patch })
     },
     onMetadataChange: (callback: Handler<Metadata>) => {
       metadataListeners.add(callback)
@@ -34,8 +52,8 @@ const OBR = {
     },
   },
   player: {
-    getRole: async () => "GM",
-    getConnectionId: async () => "browser-test-gm",
+    getRole: async () => role,
+    getConnectionId: async () => connectionId,
     onChange: noSubscription,
   },
   party: { getPlayers: async () => [], onChange: noSubscription },
@@ -61,11 +79,9 @@ const OBR = {
   },
   broadcast: {
     sendMessage: async (channel: string, data: unknown) => {
-      broadcastListeners
-        .get(channel)
-        ?.forEach(callback =>
-          callback({ data, connectionId: "browser-test-gm" }),
-        )
+      if (transport.__obrBroadcast)
+        await transport.__obrBroadcast(channel, data)
+      else state.receiveBroadcast(channel, { data, connectionId })
     },
     onMessage: (
       channel: string,

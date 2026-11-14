@@ -18,6 +18,7 @@ import { CsvError, TracksToCsv, csvToTracks } from "../csv"
 import { clearLibrary, getLibrary, mergeLibrary } from "../library"
 import { ConfirmPayload } from "./Confirm"
 import { CsvErrors } from "./CsvErrors"
+import { SOURCE_CODE_URL } from "../project"
 
 const importButton = (setErrors: (errors: CsvError[]) => void) => {
   const input = document.createElement("input")
@@ -165,11 +166,11 @@ export function IconMenu(props: Props) {
           </MenuItem>
           <MenuItem
             component="a"
-            href={new URL("source.zip", location.href).href}
+            href={SOURCE_CODE_URL}
             target="_blank"
             rel="noreferrer"
           >
-            Source code (AGPL-3.0)
+            Source code
           </MenuItem>
         </MenuList>
       </Menu>

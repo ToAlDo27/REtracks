@@ -10,6 +10,7 @@ export function syncAudio(
 ): () => void {
   let active = true
   let failed = false
+  let buffering = false
   const report = (error: unknown) => {
     if (!active || failed) return
     if (error instanceof DOMException && error.name === "AbortError") return
@@ -26,12 +27,12 @@ export function syncAudio(
           ? audio.duration
           : message.duration,
     }
-  const apply = () => {
+  const apply = (tolerance = 0.25) => {
     const state = current()
     if (!active || !ready || !state || audio.readyState < 1) return
     try {
       const position = getMediaPosition(state)
-      if (Math.abs(audio.currentTime - position) > 0.25)
+      if (Math.abs(audio.currentTime - position) > tolerance)
         audio.currentTime = position
       if (state.action === Action.Play && audio.paused) {
         const result = audio.play()
@@ -57,29 +58,61 @@ export function syncAudio(
     report(
       new Error("Audio playback failed. Check the source link and try again."),
     )
+  const available = () => {
+    buffering = false
+    apply()
+  }
+  const waiting = () => {
+    buffering = true
+  }
+  const playing = () => {
+    buffering = false
+  }
+  const synchronize = () => {
+    // Automatic seeks during buffering can repeatedly discard downloaded data.
+    // Once playback resumes, catch up to the room clock without nudging normal
+    // playback for small timing differences between browsers.
+    if (
+      !active ||
+      failed ||
+      buffering ||
+      audio.seeking ||
+      audio.readyState < 3 ||
+      message?.action !== Action.Play
+    )
+      return
+    apply(1.5)
+  }
+  let interval: ReturnType<typeof setInterval> | undefined
 
   audio.pause()
   if (!message) {
     audio.removeAttribute("src")
     audio.load()
   } else {
-    audio.addEventListener("loadedmetadata", apply)
-    audio.addEventListener("canplay", apply)
+    audio.addEventListener("loadedmetadata", available)
+    audio.addEventListener("canplay", available)
+    audio.addEventListener("waiting", waiting)
+    audio.addEventListener("playing", playing)
     audio.addEventListener("timeupdate", enforceClip)
-    audio.addEventListener("ended", apply)
+    audio.addEventListener("ended", available)
     audio.addEventListener("error", mediaError)
     if (audio.getAttribute("src") !== message.track.url) {
       audio.src = message.track.url
       audio.load()
     }
     apply()
+    if (ready) interval = setInterval(synchronize, 1000)
   }
   return () => {
     active = false
-    audio.removeEventListener("loadedmetadata", apply)
-    audio.removeEventListener("canplay", apply)
+    clearInterval(interval)
+    audio.removeEventListener("loadedmetadata", available)
+    audio.removeEventListener("canplay", available)
+    audio.removeEventListener("waiting", waiting)
+    audio.removeEventListener("playing", playing)
     audio.removeEventListener("timeupdate", enforceClip)
-    audio.removeEventListener("ended", apply)
+    audio.removeEventListener("ended", available)
     audio.removeEventListener("error", mediaError)
     audio.pause()
   }

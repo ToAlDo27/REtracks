@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("../src/time", () => ({ now: () => new Date("2026-01-01T00:00:05Z") }))
+vi.mock("../src/time", () => ({ now: () => new Date(Date.now()) }))
 
 import { syncAudio } from "../src/audioController"
 import { Action } from "../src/playback"
@@ -10,12 +10,15 @@ class Media extends EventTarget {
   readyState = 0
   duration = 90
   paused = true
+  seeking = false
   position = 0
+  seek = vi.fn()
   get currentTime() {
     return this.position
   }
   set currentTime(value: number) {
     if (this.readyState < 1) throw new Error("Cannot seek before metadata")
+    this.seek(value)
     this.position = value
   }
   pause = vi.fn(() => {
@@ -56,7 +59,13 @@ const base = {
 }
 let audio: Media
 beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-01-01T00:00:05Z"))
   audio = new Media()
+})
+afterEach(() => {
+  vi.clearAllTimers()
+  vi.useRealTimers()
 })
 
 describe("direct audio synchronization", () => {
@@ -150,5 +159,71 @@ describe("direct audio synchronization", () => {
     audio.currentTime = 41
     audio.dispatchEvent(new Event("timeupdate"))
     expect(audio.currentTime).toBe(15)
+  })
+
+  it("corrects clock drift after background suspension without restarting playback", () => {
+    syncAudio(audio as unknown as HTMLAudioElement, base, true, vi.fn())
+    audio.metadata()
+    audio.readyState = 4
+    audio.seek.mockClear()
+    vi.setSystemTime(new Date("2026-01-01T00:00:14Z"))
+    vi.advanceTimersByTime(1000)
+    expect(audio.currentTime).toBe(25)
+    expect(audio.seek).toHaveBeenCalledOnce()
+    expect(audio.play).toHaveBeenCalledOnce()
+  })
+
+  it("does not seek during normal playback with a small clock difference", () => {
+    syncAudio(audio as unknown as HTMLAudioElement, base, true, vi.fn())
+    audio.metadata()
+    audio.readyState = 4
+    audio.seek.mockClear()
+    for (let second = 1; second <= 5; second += 1) {
+      audio.position = 15 + second - 0.3
+      vi.advanceTimersByTime(1000)
+    }
+    expect(audio.seek).not.toHaveBeenCalled()
+    expect(audio.play).toHaveBeenCalledOnce()
+  })
+
+  it("leaves buffering and seeking alone, then catches up when media is available", () => {
+    syncAudio(audio as unknown as HTMLAudioElement, base, true, vi.fn())
+    audio.metadata()
+    audio.seek.mockClear()
+    // Metadata alone does not mean enough media has downloaded for playback.
+    vi.advanceTimersByTime(3000)
+    expect(audio.seek).not.toHaveBeenCalled()
+    audio.readyState = 4
+    audio.dispatchEvent(new Event("waiting"))
+    vi.advanceTimersByTime(3000)
+    expect(audio.seek).not.toHaveBeenCalled()
+    audio.dispatchEvent(new Event("canplay"))
+    expect(audio.currentTime).toBe(21)
+    audio.seek.mockClear()
+    audio.seeking = true
+    vi.advanceTimersByTime(3000)
+    expect(audio.seek).not.toHaveBeenCalled()
+    audio.seeking = false
+    vi.advanceTimersByTime(1000)
+    expect(audio.currentTime).toBe(25)
+  })
+
+  it("disposes the correction timer before the next source starts loading", () => {
+    const dispose = syncAudio(
+      audio as unknown as HTMLAudioElement,
+      base,
+      true,
+      vi.fn(),
+    )
+    audio.metadata()
+    audio.readyState = 4
+    dispose()
+    audio.seek.mockClear()
+    audio.play.mockClear()
+    vi.advanceTimersByTime(5000)
+    audio.dispatchEvent(new Event("canplay"))
+    expect(audio.seek).not.toHaveBeenCalled()
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

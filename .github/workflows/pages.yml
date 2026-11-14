@@ -29,7 +29,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run lint
-      - name: Build extension and corresponding source
+      - name: Build extension
         run: npm run package
         env:
           VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}/

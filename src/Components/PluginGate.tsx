@@ -1,6 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk"
 import React, { useEffect, useState } from "react"
 import { Alert, Box, Button, Link, Stack, Typography } from "@mui/material"
+import { SOURCE_CODE_URL } from "../project"
 
 /**
  * Only render the children when we're within a plugin
@@ -30,8 +31,8 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
             browser tab broadcasting.
           </Typography>
           <Alert severity="info">
-            Install this as an Owlbear Rodeo extension, then open REtracks in your
-            room.
+            Install this as an Owlbear Rodeo extension, then open REtracks in
+            your room.
           </Alert>
           <Typography>
             In Owlbear Rodeo, open Extras → Extensions → Add custom extension
@@ -70,13 +71,12 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
           >
             Open Owlbear Rodeo
           </Link>
+          <Link href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
+            Source code
+          </Link>
           <Typography variant="caption">
-            REtracks by <Link href="https://github.com/ToAlDo27">ToAlDo27</Link>.
-            {" "}Based on Tracks by Jordan Cohen.{" "}
-            <Link href={new URL("source.zip", location.href).href}>
-              Download source code
-            </Link>{" "}
-            · AGPL-3.0
+            REtracks by <Link href="https://github.com/ToAlDo27">ToAlDo27</Link>
+            . Based on Tracks by Jordan Cohen. · AGPL-3.0
           </Typography>
         </Stack>
       </Box>
