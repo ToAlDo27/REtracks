@@ -71,7 +71,8 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
             Open Owlbear Rodeo
           </Link>
           <Typography variant="caption">
-            Based on Tracks by Jordan Cohen.{" "}
+            REtracks by <Link href="https://github.com/ToAlDo27">ToAlDo27</Link>.
+            {" "}Based on Tracks by Jordan Cohen.{" "}
             <Link href={new URL("source.zip", location.href).href}>
               Download source code
             </Link>{" "}

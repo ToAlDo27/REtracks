@@ -1,5 +1,7 @@
 # REtracks
 
+Author of REtracks: [ToAlDo27](https://github.com/ToAlDo27).
+
 A modified version of [hypergig/obr-tracks](https://github.com/hypergig/obr-tracks), the Owlbear Rodeo music extension by Jordan Cohen. See [Russian instructions](README.ru.md) and [user documentation](docs/store.md).
 
 **Install link:** [REtracks manifest](https://toaldo27.github.io/REtracks/manifest.json). Add this URL in Owlbear Rodeo → Extras → Extensions → Add custom extension. The link becomes available after a successful GitHub Pages deployment.

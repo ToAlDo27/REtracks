@@ -1,10 +1,10 @@
 {
   "name": "REtracks",
   "description": "Synchronized music, editable audio and YouTube clips, bulk library import and browser tab audio broadcasting",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "manifest_version": 1,
   "icon": "/tracks_256.png",
-  "author": "Jordan Cohen",
+  "author": "ToAlDo27",
   "homepage_url": "https://github.com/ToAlDo27/REtracks",
   "permissions": [
     {

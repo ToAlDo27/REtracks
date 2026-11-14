@@ -1,5 +1,9 @@
 {
   "name": "obr-tracks",
+  "author": {
+    "name": "ToAlDo27",
+    "url": "https://github.com/ToAlDo27"
+  },
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,7 +1,7 @@
 ---
 title: Tracks Plus
 description: Add and edit audio links and YouTube clips, import a music library, and share browser tab audio with your Owlbear Rodeo room
-author: Jordan Cohen
+author: ToAlDo27
 image: https://raw.githubusercontent.com/hypergig/obr-tracks/main/docs/header.png
 icon: /tracks_256.png
 tags:
