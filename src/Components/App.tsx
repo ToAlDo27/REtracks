@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Collapse,
+  Link,
   Stack,
   Toolbar,
   Typography,
@@ -27,7 +28,7 @@ import { VolumeSlider } from "./VolumeSlider"
 import { TabBroadcast } from "./TabBroadcast"
 import { getYouTubeId } from "../youtubeUrl"
 import { getVolume, setVolume as persistVolume } from "../volume"
-import { APP_NAME } from "../project"
+import { APP_NAME, AUTHOR_NAME, AUTHOR_URL, SOURCE_CODE_URL } from "../project"
 import { ReleaseNotes } from "./ReleaseNotes"
 
 export function App() {
@@ -107,13 +108,20 @@ export function App() {
       height={
         role === Role.GM
           ? 1000
-          : (currentMessage !== undefined ? (youtube ? 530 : 270) : 160) +
+          : (currentMessage !== undefined ? (youtube ? 578 : 318) : 208) +
             (broadcastActive ? 140 : 0)
       }
       badgeText={mute ? "🔇" : undefined}
       badgeColor="transparent"
     >
-      <Box onClick={ready ? undefined : () => setReady(true)}>
+      <Box
+        onClick={ready ? undefined : () => setReady(true)}
+        sx={{
+          minHeight: "calc(100dvh - 16px)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {/* toolbar */}
         <AppBar position="static">
           {/* menu, meader, and volume control */}
@@ -124,7 +132,7 @@ export function App() {
                 openTrackDialog={handleTrackDialogOpen}
               />
             </GMOnly>
-            <Typography variant="h5" sx={{ flexGrow: 1 }}>
+            <Typography variant="h5" sx={{ flexGrow: 1, whiteSpace: "nowrap" }}>
               {APP_NAME}
             </Typography>
             <ReleaseNotes notify />
@@ -200,6 +208,36 @@ export function App() {
             confirm={setConfirmPayload}
           />
         </GMOnly>
+        <Box
+          component="footer"
+          sx={{
+            mt: "auto",
+            px: 2,
+            py: 1.5,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 1,
+            borderTop: 1,
+            borderColor: "divider",
+            color: "text.secondary",
+          }}
+        >
+          <Typography variant="caption">
+            by{" "}
+            <Link href={AUTHOR_URL} target="_blank" rel="noreferrer">
+              {AUTHOR_NAME}
+            </Link>
+          </Typography>
+          <Link
+            href={SOURCE_CODE_URL}
+            target="_blank"
+            rel="noreferrer"
+            variant="caption"
+          >
+            Source code
+          </Link>
+        </Box>
       </Box>
     </ActionPopover>
   )

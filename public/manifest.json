@@ -1,7 +1,7 @@
 {
   "name": "ReTracks",
   "description": "Synchronized music, editable audio and YouTube clips, bulk library import and browser tab audio broadcasting",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "manifest_version": 1,
   "icon": "/music-icon.svg",
   "author": "ToAlDo27",
