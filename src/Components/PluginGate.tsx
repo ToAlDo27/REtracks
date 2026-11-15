@@ -1,7 +1,8 @@
 import OBR from "@owlbear-rodeo/sdk"
 import React, { useEffect, useState } from "react"
 import { Alert, Box, Button, Link, Stack, Typography } from "@mui/material"
-import { SOURCE_CODE_URL } from "../project"
+import { APP_NAME, SOURCE_CODE_URL } from "../project"
+import { ReleaseNotes } from "./ReleaseNotes"
 
 /**
  * Only render the children when we're within a plugin
@@ -25,13 +26,17 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
     return (
       <Box sx={{ maxWidth: 600, mx: "auto", p: 4 }}>
         <Stack spacing={3}>
-          <Typography variant="h3">REtracks</Typography>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <img src="./music-icon.svg" width="64" height="64" alt="" />
+            <Typography variant="h3">{APP_NAME}</Typography>
+            <ReleaseNotes />
+          </Stack>
           <Typography>
             Music for your Owlbear Rodeo room: audio links, YouTube clips and
             browser tab broadcasting.
           </Typography>
           <Alert severity="info">
-            Install this as an Owlbear Rodeo extension, then open REtracks in
+            Install this as an Owlbear Rodeo extension, then open ReTracks in
             your room.
           </Alert>
           <Typography>
@@ -75,7 +80,7 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
             Source code
           </Link>
           <Typography variant="caption">
-            REtracks by <Link href="https://github.com/ToAlDo27">ToAlDo27</Link>
+            ReTracks by <Link href="https://github.com/ToAlDo27">ToAlDo27</Link>
             . Based on Tracks by Jordan Cohen. · AGPL-3.0
           </Typography>
         </Stack>

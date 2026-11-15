@@ -26,6 +26,9 @@ import { TrackSearch } from "./TrackSearch"
 import { VolumeSlider } from "./VolumeSlider"
 import { TabBroadcast } from "./TabBroadcast"
 import { getYouTubeId } from "../youtubeUrl"
+import { getVolume, setVolume as persistVolume } from "../volume"
+import { APP_NAME } from "../project"
+import { ReleaseNotes } from "./ReleaseNotes"
 
 export function App() {
   const currentMessage = useMessage()
@@ -74,10 +77,19 @@ export function App() {
 
   // audio state
   const [ready, setReady] = useState(false)
-  const [volume, setVolume] = useState(0)
+  const [volume, setVolume] = useState(getVolume)
   const [mute, setMute] = useState(true)
   const [broadcastActive, setBroadcastActive] = useState(false)
   const playerProps = { ready, volume, mute: mute || broadcastActive }
+  const changeVolume = (value: number) => {
+    setVolume(value)
+    persistVolume(value)
+  }
+  const enableAudio = () => {
+    setReady(true)
+    setMute(false)
+    if (volume === 0) changeVolume(0.3)
+  }
   const youtube = currentMessage && getYouTubeId(currentMessage.track.url)
 
   // unmute reminder
@@ -95,11 +107,8 @@ export function App() {
       height={
         role === Role.GM
           ? 1000
-          : currentMessage !== undefined
-            ? youtube
-              ? 530
-              : 270
-            : 120
+          : (currentMessage !== undefined ? (youtube ? 530 : 270) : 160) +
+            (broadcastActive ? 140 : 0)
       }
       badgeText={mute ? "🔇" : undefined}
       badgeColor="transparent"
@@ -116,12 +125,17 @@ export function App() {
               />
             </GMOnly>
             <Typography variant="h5" sx={{ flexGrow: 1 }}>
-              Tracks
+              {APP_NAME}
             </Typography>
+            <ReleaseNotes notify />
 
             <Stack spacing={0} direction="row" alignItems="center" flex={9}>
-              <VolumeSlider onVolume={setVolume} disabled={mute} />
-              <MuteButton onMute={setMute} />
+              <VolumeSlider
+                volume={volume}
+                onVolume={changeVolume}
+                disabled={mute}
+              />
+              <MuteButton mute={mute} onMute={setMute} />
             </Stack>
           </Toolbar>
 
@@ -156,6 +170,7 @@ export function App() {
           gm={role === Role.GM}
           mute={mute}
           volume={volume}
+          onEnableAudio={enableAudio}
           onActiveChange={setBroadcastActive}
         />
 

@@ -1,10 +1,12 @@
-# REtracks
+# ReTracks
 
-Author of REtracks: [ToAlDo27](https://github.com/ToAlDo27).
+Author of ReTracks: [ToAlDo27](https://github.com/ToAlDo27).
+
+Read [the release history](CHANGELOG.md), or click the version in the extension or installation page. The existing repository and installation URLs stay the same.
 
 A modified version of [hypergig/obr-tracks](https://github.com/hypergig/obr-tracks), the Owlbear Rodeo music extension by Jordan Cohen. See [Russian instructions](README.ru.md) and [user documentation](docs/store.md).
 
-**Install link:** [REtracks manifest](https://toaldo27.github.io/REtracks/manifest.json). Add this URL in Owlbear Rodeo → Extras → Extensions → Add custom extension. The link becomes available after a successful GitHub Pages deployment.
+**Install link:** [ReTracks manifest](https://toaldo27.github.io/REtracks/manifest.json). Add this URL in Owlbear Rodeo → Extras → Extensions → Add custom extension.
 
 ## Changes
 
@@ -32,9 +34,9 @@ npm run package
 ### GitHub Pages
 
 1. Put the source files in your public `REtracks` repository, including `.github/workflows/pages.yml`, and push to `main`.
-2. In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**. If the first run happened before enabling Pages, rerun **Publish REtracks to GitHub Pages** in the Actions tab.
-3. Wait for deployment, then open [the REtracks website](https://toaldo27.github.io/REtracks/).
-4. In Owlbear Rodeo, open **Extras → Extensions → Add custom extension**, paste `https://toaldo27.github.io/REtracks/manifest.json`, and enable REtracks in your room. For your own fork, replace `toaldo27` with its owner's username.
+2. In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**. If the first run happened before enabling Pages, rerun **Publish ReTracks to GitHub Pages** in the Actions tab.
+3. Wait for deployment, then open [the ReTracks website](https://toaldo27.github.io/REtracks/).
+4. In Owlbear Rodeo, open **Extras → Extensions → Add custom extension**, paste `https://toaldo27.github.io/REtracks/manifest.json`, and enable ReTracks in your room. For your own fork, replace `toaldo27` with its owner's username.
 
 The included workflow tests, builds and publishes the extension after each push to `main`. It reads the actual Pages path automatically, so renamed repositories and custom domains also work. The install link is the hosted `manifest.json`; a GitHub repository link or a raw source link cannot install the extension. The upstream manifest URL still points to the original extension.
 
@@ -48,7 +50,18 @@ Static hosting must serve `broadcast.html` as its own page rather than rewriting
 
 ## Tab audio
 
-The GM opens **Share tab audio**, then **Choose tab and start** in the popup. Select the music tab and enable **Share tab audio**. Players unmute Tracks and click **Listen to tab audio**. Keep the source tab, popup, and Owlbear room open. Only audio is sent; the temporary captured video track is never added to the connection. Changing songs in the source tab does not rebuild the stream.
+The GM opens **Share tab audio**, then **Choose tab and start** in the popup. Select the music tab and enable **Share tab audio**. Players click **Listen to tab audio**: this explicitly unmutes playback and restores 30% volume if their volume was zero. If the browser blocks playback after connecting, click **Enable stream audio**. Volume and the mute button still work normally. Keep the source tab, popup, and Owlbear room open. Only audio is sent; the temporary captured video track is never added to the connection. Changing songs in the source tab does not rebuild the stream.
+
+## Publishing updates
+
+Every published application update must increase the version and record its changes:
+
+```sh
+npm run release -- patch "Describe the user-facing change"
+npm run check:release
+```
+
+Use `minor` or `major` for larger updates. This command updates package.json, package-lock.json, the manifest, in-app release history and CHANGELOG.md together. GitHub Actions checks these files and rejects application changes published with an unchanged version. The 1.0.0 release starts the ReTracks numbering series. Existing library and room metadata keys are preserved.
 
 Desktop Chrome or Edge is recommended for capture. The browser must support tab audio capture and allow popups. The receiver must support WebRTC. A public STUN server is configured; there is **no bundled TURN relay**, so restrictive networks can prevent connections. Larger groups increase the GM's outgoing bandwidth. Library playback is locally muted while broadcasting/listening, and resumes when disconnected.
 

@@ -20,7 +20,7 @@ export function setSkew(callback: () => void) {
       if (Number.isFinite(serverTime)) skew = serverTime - Date.now()
     } catch {
       // A failed time check must not prevent the entire music UI from mounting.
-      console.warn("Tracks could not check server time; using the local clock.")
+      console.warn("ReTracks could not check server time; using the local clock.")
     } finally {
       clearTimeout(timer)
       callback()

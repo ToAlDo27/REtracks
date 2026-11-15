@@ -16,10 +16,17 @@ interface Props {
   gm: boolean
   mute: boolean
   volume: number
+  onEnableAudio: () => void
   onActiveChange: (active: boolean) => void
 }
 
-export function TabBroadcast({ gm, mute, volume, onActiveChange }: Props) {
+export function TabBroadcast({
+  gm,
+  mute,
+  volume,
+  onActiveChange,
+  onEnableAudio,
+}: Props) {
   const [state, setState] = useState<TabAudioState>({
     available: false,
     listening: false,
@@ -226,7 +233,13 @@ export function TabBroadcast({ gm, mute, volume, onActiveChange }: Props) {
 
   return (
     <Box sx={{ px: 2, py: 1 }}>
-      <audio ref={audio} muted={mute} />
+      <audio
+        ref={audio}
+        muted={mute}
+        autoPlay
+        playsInline
+        aria-label="Tab audio stream"
+      />
       <Stack
         direction="row"
         spacing={1}
@@ -252,6 +265,11 @@ export function TabBroadcast({ gm, mute, volume, onActiveChange }: Props) {
                 return
               }
               peer.current?.disconnect()
+              onEnableAudio()
+              if (audio.current) {
+                audio.current.muted = false
+                audio.current.volume = volume > 0 ? volume : 0.3
+              }
               peer.current?.listen()
             }}
           >
@@ -267,6 +285,11 @@ export function TabBroadcast({ gm, mute, volume, onActiveChange }: Props) {
           <Button
             size="small"
             onClick={() => {
+              onEnableAudio()
+              if (audio.current) {
+                audio.current.muted = false
+                audio.current.volume = volume > 0 ? volume : 0.3
+              }
               void audio.current
                 ?.play()
                 .then(() => setBlocked(false))

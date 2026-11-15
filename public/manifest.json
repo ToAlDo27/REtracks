@@ -1,9 +1,9 @@
 {
-  "name": "REtracks",
+  "name": "ReTracks",
   "description": "Synchronized music, editable audio and YouTube clips, bulk library import and browser tab audio broadcasting",
-  "version": "1.9.2",
+  "version": "1.0.0",
   "manifest_version": 1,
-  "icon": "/tracks_256.png",
+  "icon": "/music-icon.svg",
   "author": "ToAlDo27",
   "homepage_url": "https://github.com/ToAlDo27/REtracks",
   "permissions": [
@@ -13,8 +13,8 @@
     }
   ],
   "action": {
-    "title": "REtracks",
-    "icon": "/album_black_24dp.svg",
+    "title": "ReTracks",
+    "icon": "/music-action.svg",
     "popover": "/",
     "width": 400
   }

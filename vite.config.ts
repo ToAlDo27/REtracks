@@ -18,8 +18,8 @@ export default defineConfig(({ mode }) => {
           const manifest = JSON.parse(
             readFileSync(new URL("./public/manifest.json", import.meta.url), "utf8"),
           )
-          manifest.icon = `${base}tracks_256.png`
-          manifest.action.icon = `${base}album_black_24dp.svg`
+          manifest.icon = `${base}music-icon.svg`
+          manifest.action.icon = `${base}music-action.svg`
           manifest.action.popover = base
           this.emitFile({
             type: "asset",

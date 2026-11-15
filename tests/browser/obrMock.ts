@@ -5,6 +5,7 @@ type MockWindow = Window & {
   __obrGetMetadata?: () => Promise<Metadata>
   __obrSetMetadata?: (patch: Metadata) => Promise<void>
   __obrBroadcast?: (channel: string, data: unknown) => Promise<void>
+  __obrGetPlayers?: () => Promise<{ role: string; connectionId: string }[]>
 }
 const transport = window as MockWindow
 const parameters = new URLSearchParams(location.search)
@@ -17,6 +18,7 @@ const state = {
   metadata: {} as Metadata,
   writes: [] as Metadata[],
   notifications: [] as string[],
+  actionHeight: 0,
   receiveMetadata: (metadata: Metadata) => {
     state.metadata = { ...metadata }
     metadataListeners.forEach(callback => callback({ ...state.metadata }))
@@ -31,7 +33,7 @@ Object.assign(window, { __obrMock: state })
 const noop = async () => undefined
 const noSubscription = () => () => undefined
 const OBR = {
-  isAvailable: true,
+  isAvailable: parameters.get("embedded") !== "0",
   onReady: (callback: () => void) => queueMicrotask(callback),
   room: {
     getMetadata: async () => {
@@ -56,7 +58,11 @@ const OBR = {
     getConnectionId: async () => connectionId,
     onChange: noSubscription,
   },
-  party: { getPlayers: async () => [], onChange: noSubscription },
+  party: {
+    getPlayers: async () =>
+      transport.__obrGetPlayers ? transport.__obrGetPlayers() : [],
+    onChange: noSubscription,
+  },
   theme: {
     getTheme: async () => ({
       mode: "DARK",
@@ -68,7 +74,9 @@ const OBR = {
     onChange: noSubscription,
   },
   action: {
-    setHeight: noop,
+    setHeight: async (height: number) => {
+      state.actionHeight = height
+    },
     setBadgeText: noop,
     setBadgeBackgroundColor: noop,
   },

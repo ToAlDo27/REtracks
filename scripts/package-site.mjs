@@ -23,6 +23,7 @@ const source =
 writeFileSync("dist/LICENSE.txt", readFileSync("LICENSE"))
 writeFileSync(
   "dist/SOURCE.txt",
-  `REtracks by ToAlDo27\nSource code: ${source}\nRepository: ${repository}\nBased on Tracks by Jordan Cohen: https://github.com/hypergig/obr-tracks\nLicense: AGPL-3.0 (see LICENSE.txt)\n`,
+  `ReTracks by ToAlDo27\nSource code: ${source}\nRepository: ${repository}\nBased on Tracks by Jordan Cohen: https://github.com/hypergig/obr-tracks\nLicense: AGPL-3.0 (see LICENSE.txt)\n`,
 )
+writeFileSync("dist/CHANGELOG.md", readFileSync("CHANGELOG.md"))
 console.log(`Source code available at ${source}`)

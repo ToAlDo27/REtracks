@@ -113,7 +113,7 @@ export function getYouTubeErrorMessage(code: number): string {
     case 150:
       return "The owner of this YouTube video does not allow embedded playback. Choose another video."
     case 153:
-      return "YouTube could not verify this embed. Open Tracks from its hosted HTTPS address and check the browser referrer settings."
+      return "YouTube could not verify this embed. Open ReTracks from its hosted HTTPS address and check the browser referrer settings."
     default:
       return "YouTube playback failed. Check the video or choose another track."
   }

@@ -15,6 +15,7 @@ import {
   isTabSignal,
   isTrustedTabBridgeMessage,
 } from "./tabAudio"
+import { APP_NAME, APP_VERSION } from "./project"
 
 export function BroadcastWindow() {
   const token = location.hash.slice(1)
@@ -30,7 +31,7 @@ export function BroadcastWindow() {
     mounted.current = true
     const parent = opener.current
     if (!/^[a-f0-9-]{36}$/.test(token) || !parent) {
-      setError("Open this window using Share tab audio in Tracks.")
+      setError(`Open this window using Share tab audio in ${APP_NAME}.`)
       return
     }
     const post = (data: Record<string, unknown>) =>
@@ -64,7 +65,7 @@ export function BroadcastWindow() {
         setActive(false)
         setPending(false)
         setError(
-          "The Owlbear connection closed. Reopen Share tab audio in Tracks.",
+          `The Owlbear connection closed. Reopen Share tab audio in ${APP_NAME}.`,
         )
       }
     }, 4000)
@@ -96,10 +97,22 @@ export function BroadcastWindow() {
     const request = ++captureRequest.current
     try {
       // Capture needs a video track, but only audio tracks are ever added to WebRTC.
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      })
+      const captureOptions: DisplayMediaStreamOptions & {
+        selfBrowserSurface: string
+        surfaceSwitching: string
+      } = {
+        video: { displaySurface: "browser" },
+        audio: {
+          suppressLocalAudioPlayback: false,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        } as MediaTrackConstraints,
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+      }
+      const stream =
+        await navigator.mediaDevices.getDisplayMedia(captureOptions)
       if (!stream.getAudioTracks().length) {
         stream.getTracks().forEach(track => track.stop())
         throw new Error(
@@ -141,7 +154,15 @@ export function BroadcastWindow() {
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
       <Stack spacing={3}>
-        <Typography variant="h4">Broadcast tab audio</Typography>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <img src="./music-icon.svg" width="44" height="44" alt="" />
+          <div>
+            <Typography variant="h4">Broadcast tab audio</Typography>
+            <Typography variant="caption">
+              {APP_NAME} {APP_VERSION}
+            </Typography>
+          </div>
+        </Stack>
         <Typography>
           Open your music in another browser tab. Choose that tab below and
           enable “Share tab audio”. Only its audio is sent to listeners in your
@@ -150,7 +171,7 @@ export function BroadcastWindow() {
         <Alert severity={active ? "success" : "info"}>
           {active
             ? "Broadcasting. Change songs in the source tab. Keep this window and Owlbear open."
-            : "Listeners click Listen to tab audio in Tracks. Desktop Chrome or Edge is recommended for capture."}
+            : `Listeners click Listen to tab audio in ${APP_NAME}; this enables their sound. Desktop Chrome or Edge is recommended for capture.`}
         </Alert>
         {error && <Alert severity="error">{error}</Alert>}
         <Button
