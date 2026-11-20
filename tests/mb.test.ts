@@ -119,13 +119,16 @@ describe("room playback requests", () => {
     const { play } = await import("../src/mb")
     await Promise.all([play(track("first")), play(track("second"))])
     expect(mocks.setMetadata).toHaveBeenCalledOnce()
-    expect(mocks.setMetadata).toHaveBeenCalledWith({
-      control: expect.objectContaining({
-        track: track("second"),
-        duration: 0,
-        selectionId: expect.any(String),
+    expect(mocks.setMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        control: expect.objectContaining({
+          track: track("second"),
+          duration: 0,
+          selectionId: expect.any(String),
+        }),
+        "control-order": expect.objectContaining({ tick: expect.any(Number) }),
       }),
-    })
+    )
   })
 
   it("stop supersedes a queued selection while an older room write is still in flight", async () => {
@@ -140,9 +143,12 @@ describe("room playback requests", () => {
     pending.resolve()
     await Promise.all([first, second])
     await vi.waitFor(() =>
-      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
-        control: undefined,
-      }),
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          control: undefined,
+          "control-order": expect.objectContaining({ messageId: null }),
+        }),
+      ),
     )
     expect(mocks.setMetadata).toHaveBeenCalledTimes(2)
   })
@@ -154,23 +160,27 @@ describe("room playback requests", () => {
     pause()
     await replacement
     await vi.waitFor(() =>
-      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
-        control: expect.objectContaining({
-          track: track("second"),
-          action: Action.Pause,
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          control: expect.objectContaining({
+            track: track("second"),
+            action: Action.Pause,
+          }),
         }),
-      }),
+      ),
     )
     const paused = mocks.setMetadata.mock.calls.at(-1)?.[0].control
     resume()
     await vi.waitFor(() =>
-      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
-        control: expect.objectContaining({
-          track: track("second"),
-          action: Action.Play,
-          selectionId: paused.selectionId,
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          control: expect.objectContaining({
+            track: track("second"),
+            action: Action.Play,
+            selectionId: paused.selectionId,
+          }),
         }),
-      }),
+      ),
     )
   })
 
@@ -181,9 +191,63 @@ describe("room playback requests", () => {
       url: "https://www.youtube.com/watch?v=abcdefghijk",
     }
     await play(youtube)
-    expect(mocks.setMetadata).toHaveBeenCalledWith({
-      control: expect.objectContaining({ track: youtube, duration: 0 }),
+    expect(mocks.setMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        control: expect.objectContaining({ track: youtube, duration: 0 }),
+      }),
+    )
+  })
+
+  it("shows an acknowledged local selection even if the room does not echo it", async () => {
+    const { play, onMessage } = await import("../src/mb")
+    const received = vi.fn()
+    const unsubscribe = onMessage(received)
+    try {
+      await vi.waitFor(() => expect(received).toHaveBeenCalledWith(undefined))
+      await play(track("replacement"))
+      expect(received).toHaveBeenLastCalledWith(
+        expect.objectContaining({ track: track("replacement") }),
+      )
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it("accepts a newer initial room read when an older event arrives first", async () => {
+    const snapshot = deferred<Record<string, unknown>>()
+    let receive!: (value: Record<string, unknown>) => void
+    mocks.getMetadata.mockReturnValueOnce(snapshot.promise)
+    mocks.onMetadataChange.mockImplementationOnce(
+      (callback: typeof receive) => {
+        receive = callback
+        return vi.fn()
+      },
+    )
+    const { onMessage, Action } = await import("../src/mb")
+    const received = vi.fn()
+    const unsubscribe = onMessage(received)
+    const update = (id: string, tick: number) => ({
+      control: {
+        id,
+        time: new Date("2026-01-01T00:00:00Z"),
+        action: Action.Play,
+        offset: 0,
+        duration: 0,
+        track: track(id),
+      },
+      "control-order": { id, tick, messageId: id },
     })
+    try {
+      receive(update("previous", 1))
+      snapshot.resolve(update("replacement", 2))
+      await vi.waitFor(() =>
+        expect(received).toHaveBeenLastCalledWith(
+          expect.objectContaining({ track: track("replacement") }),
+        ),
+      )
+    } finally {
+      unsubscribe()
+    }
   })
 
   it("rejects malformed links without changing the room selection", async () => {

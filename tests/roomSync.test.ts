@@ -120,6 +120,33 @@ const track = {
 }
 
 describe("room playback across independent listeners", () => {
+  it("keeps the new track when the room delivers an older snapshot again", async () => {
+    const host = await connect()
+    const guest = await connect()
+    const { play } = await import("../src/mb")
+    await play(track)
+    const delayedUpdate = structuredClone(metadata)
+
+    advance(1)
+    const replacement = {
+      ...track,
+      title: "Replacement",
+      url: "https://example.com/replacement.mp3",
+    }
+    await play(replacement)
+    for (const receive of listeners) receive(delayedUpdate)
+    for (const receive of listeners) receive({})
+
+    const lateGuest = await connect()
+    for (const client of [host, guest, lateGuest]) {
+      expect(client.audio.src).toBe(replacement.url)
+    }
+    await play(track)
+    for (const client of [host, guest, lateGuest]) {
+      expect(client.audio.src).toBe(track.url)
+    }
+  })
+
   it("aligns delayed loads and late joins, then shares pause, seek, and resume", async () => {
     const host = await connect()
     const guest = await connect()
@@ -164,6 +191,7 @@ describe("room playback across independent listeners", () => {
     const guest = await connect()
     const controls = await import("../src/mb")
     await controls.play(track)
+    const beforeStop = structuredClone(metadata)
     host.audio.metadata()
     guest.audio.metadata()
     guest.audio.dispatchEvent(new Event("waiting"))
@@ -178,6 +206,7 @@ describe("room playback across independent listeners", () => {
     expect(guest.audio.currentTime).toBe(host.audio.currentTime)
     controls.stop()
     await vi.advanceTimersByTimeAsync(0)
+    for (const receive of listeners) receive(beforeStop)
     expect(host.audio.src).toBe("")
     expect(guest.audio.src).toBe("")
     expect(host.audio.paused).toBe(true)

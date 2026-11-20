@@ -158,6 +158,7 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
       return Math.abs(a.time - b.time)
     })
     .toBeLessThan(0.5)
+  const delayedRoomState = structuredClone(metadata)
 
   await host.getByRole("button", { name: "Pause", exact: true }).click()
   for (const page of [host, guest])
@@ -229,6 +230,21 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
       return Math.abs(a.time - b.time)
     })
     .toBeLessThan(0.5)
+
+  // A repeated snapshot shouldn't change the playing element on either client.
+  for (const page of [host, guest]) {
+    await page.evaluate(async previous => {
+      const mock = (window as RoomWindow).__obrMock
+      mock.receiveMetadata(previous)
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      )
+    }, delayedRoomState)
+    expect(await audioState(page)).toMatchObject({
+      paused: false,
+      source: "https://audio.test/newest.wav",
+    })
+  }
 
   await host.getByRole("button", { name: "Stop", exact: true }).click()
   for (const page of [host, guest]) {

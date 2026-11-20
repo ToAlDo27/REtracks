@@ -9,6 +9,7 @@ import { Action, getClipDuration, getPlaybackPosition } from "./playback"
 export { Action } from "./playback"
 
 const path = key("control")
+const orderPath = key("control-order")
 
 export interface Message {
   id: string
@@ -36,6 +37,17 @@ function newPlayMessage(track: Track): Message {
 let currentMessage: Message | undefined = undefined
 let pendingWrite: { message: Message | undefined } | undefined
 let metadataWrites = Promise.resolve()
+let initialized = false
+let lastOrder: (PlaybackOrder & { stamped: boolean }) | undefined
+let lastIssuedTick = 0
+const recentCommands = new Set<string>()
+const subscribers = new Set<(message: Message | undefined) => void>()
+
+interface PlaybackOrder {
+  id: string
+  tick: number
+  messageId: string | null
+}
 
 function messageToControl() {
   return pendingWrite ? pendingWrite.message : currentMessage
@@ -57,10 +69,22 @@ function publish(message: Message | undefined) {
   const write = metadataWrites
     .then(async () => {
       if (pendingWrite !== pending) return
-      const previous = currentMessage
-      await OBR.room.setMetadata({ [path]: message })
-      // The subscription may already have delivered this write or a newer one.
-      if (currentMessage === previous) currentMessage = message
+      if (!initialized) applyMetadata(await OBR.room.getMetadata())
+      if (pendingWrite !== pending) return
+      lastIssuedTick = Math.max(
+        now().getTime(),
+        lastIssuedTick + 1,
+        (lastOrder?.tick ?? 0) + 1,
+      )
+      const order: PlaybackOrder = {
+        id: message?.id ?? uuidv4(),
+        tick: lastIssuedTick,
+        messageId: message?.id ?? null,
+      }
+      const patch = { [path]: message, [orderPath]: order }
+      await OBR.room.setMetadata(patch)
+      // Some clients receive the write acknowledgment before the room event.
+      if (pendingWrite === pending) applyMetadata(patch)
     })
     .finally(() => {
       if (pendingWrite === pending) pendingWrite = undefined
@@ -107,54 +131,99 @@ function isMessage(value: unknown): value is Message {
   return !checkTrack(track).validation
 }
 
-function extractMessage(metadata: Metadata): Message | undefined {
-  const data = metadata[path]
-  if (isMessage(data)) {
-    return data
+function readOrder(value: unknown): PlaybackOrder | undefined {
+  if (!value || typeof value !== "object") return
+  const order = value as PlaybackOrder
+  if (
+    typeof order.id === "string" &&
+    order.id &&
+    Number.isSafeInteger(order.tick) &&
+    order.tick > 0 &&
+    (order.messageId === null || order.messageId === order.id)
+  ) {
+    return order
   }
-  return undefined
+}
+
+function deliver(message: Message | undefined) {
+  if (initialized && currentMessage?.id === message?.id) return
+  initialized = true
+  currentMessage = message
+  for (const callback of subscribers) callback(currentMessage)
+}
+
+function applyMetadata(metadata: Metadata, allowLegacyClear = true) {
+  const value = metadata[path]
+  let message = isMessage(value) ? value : undefined
+  const storedOrder = readOrder(metadata[orderPath])
+  // The order belongs to one specific write. Older versions may change
+  // the playback key while leaving the last ordered write in metadata.
+  const matchedOrder =
+    storedOrder?.messageId === (message?.id ?? null) ? storedOrder : undefined
+
+  const receivedAt = now()
+  if (message && new Date(message.time).getTime() > receivedAt.getTime()) {
+    message = { ...message, time: receivedAt }
+  }
+  const order =
+    matchedOrder ??
+    (message && {
+      id: message.id,
+      tick: new Date(message.time).getTime(),
+      messageId: message.id,
+    })
+  if (!order) {
+    // A legacy Stop can clear the playback key and leave its order in place.
+    // A snapshot from before the ordered write must not clear newer playback.
+    if (!initialized) deliver(undefined)
+    else if (
+      allowLegacyClear &&
+      value === undefined &&
+      (!lastOrder?.stamped || storedOrder?.id === lastOrder.id)
+    ) {
+      deliver(undefined)
+    }
+    return
+  }
+
+  if (recentCommands.has(order.id)) return
+  if (
+    lastOrder &&
+    (order.tick < lastOrder.tick ||
+      (order.tick === lastOrder.tick && order.id <= lastOrder.id))
+  )
+    return
+
+  lastOrder = { ...order, stamped: !!matchedOrder }
+  recentCommands.add(order.id)
+  if (recentCommands.size > 100) {
+    recentCommands.delete(recentCommands.values().next().value!)
+  }
+  deliver(message)
 }
 
 export function onMessage(
   callback: (message: Message | undefined) => void,
 ): () => void {
   let active = true
-  let initialized = false
-  let lastId: string | undefined
   let receivedChange = false
-  const handler = (m: Metadata) => {
-    if (!active) return
-    let message = extractMessage(m)
-    if (!initialized || message?.id !== lastId) {
-      initialized = true
-      lastId = message?.id
-      // A future message means means there is a massive clock skew issue,
-      // so don't allow it. Instead, set the message time to now.
-      const n = now()
-      if (message && new Date(message.time).getTime() > n.getTime()) {
-        console.warn(
-          `message came from the future\nmessage time: ${message.time}\nnow: ${n}\nsetting message time to now`,
-        )
-        message = { ...message, time: n }
-      }
-
-      currentMessage = message
-      callback(currentMessage)
-    }
-  }
+  subscribers.add(callback)
+  if (initialized) callback(currentMessage)
 
   const unsubscribe = OBR.room.onMetadataChange(metadata => {
+    if (!active) return
     receivedChange = true
-    handler(metadata)
+    applyMetadata(metadata)
   })
   void OBR.room
     .getMetadata()
     .then(metadata => {
-      if (!receivedChange) handler(metadata)
+      if (active) applyMetadata(metadata, !receivedChange)
     })
     .catch(report)
   return () => {
     active = false
+    subscribers.delete(callback)
     unsubscribe()
   }
 }
