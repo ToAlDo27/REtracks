@@ -9,6 +9,7 @@ import {
   isTabSignal,
   isTrustedTabBridgeMessage,
 } from "../tabAudio"
+import { useMessage } from "./MessageProvider"
 
 const signalChannel = key("tab-audio-v1")
 
@@ -27,6 +28,16 @@ export function TabBroadcast({
   onActiveChange,
   onEnableAudio,
 }: Props) {
+  const message = useMessage()
+  const selection = message
+    ? message.selectionId ??
+      JSON.stringify([
+        message.track.url,
+        message.track.start,
+        message.track.end,
+      ])
+    : undefined
+  const previousSelection = useRef(selection)
   const [state, setState] = useState<TabAudioState>({
     available: false,
     listening: false,
@@ -202,6 +213,23 @@ export function TabBroadcast({
       setBroadcasting(false)
     }
   }, [gm])
+
+  useEffect(() => {
+    const previous = previousSelection.current
+    previousSelection.current = selection
+    if (!selection || previous === selection) return
+
+    // A library selection replaces the tab stream for hosts and listeners.
+    // Pause, resume and seek retain the same selection.
+    if (state.listening) peer.current?.disconnect()
+    if (bridgeToken.current) {
+      popup.current?.postMessage(
+        { type: "stop-capture", token: bridgeToken.current },
+        window.location.origin,
+      )
+      setBroadcasting(false)
+    }
+  }, [selection, state.listening])
 
   function openBroadcast() {
     if (popup.current && !popup.current.closed) {

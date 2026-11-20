@@ -1,5 +1,5 @@
 import { Alert, Button } from "@mui/material"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { syncAudio } from "../audioController"
 import { useMessage } from "./MessageProvider"
 import { TrackProgress } from "./TrackProgress"
@@ -17,6 +17,7 @@ export function Audio(props: AudioProps) {
   const ref = useRef<HTMLAudioElement>(null)
   const [error, setError] = useState<string>()
   const [retry, setRetry] = useState(0)
+  const [sourceDuration, setSourceDuration] = useState(0)
 
   useEffect(() => {
     if (ref.current) {
@@ -24,15 +25,19 @@ export function Audio(props: AudioProps) {
     }
   }, [volume])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setError(undefined)
     if (!ref.current) return
-    return syncAudio(ref.current, currentMessage, ready, failure =>
-      setError(failure.message),
+    return syncAudio(
+      ref.current,
+      currentMessage,
+      ready,
+      failure => setError(failure.message),
+      setSourceDuration,
     )
   }, [ready, currentMessage, retry])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const audio = ref.current
     return () => {
       if (!audio) return
@@ -60,7 +65,10 @@ export function Audio(props: AudioProps) {
             <Button
               color="inherit"
               size="small"
-              onClick={() => setRetry(value => value + 1)}
+              onClick={() => {
+                ref.current?.load()
+                setRetry(value => value + 1)
+              }}
             >
               Retry
             </Button>
@@ -69,7 +77,7 @@ export function Audio(props: AudioProps) {
           {error}
         </Alert>
       )}
-      <TrackProgress />
+      <TrackProgress sourceDuration={sourceDuration} />
     </>
   )
 }

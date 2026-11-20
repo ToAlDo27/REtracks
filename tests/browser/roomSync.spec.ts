@@ -53,9 +53,13 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
   const joined = new Set<Page>()
   const errors: string[] = []
   let metadata: Metadata = {}
-  let slowServed!: () => void
+  let requestSlow!: () => void
+  let releaseSlow!: () => void
+  const slowRequested = new Promise<void>(resolve => {
+    requestSlow = resolve
+  })
   const slowResponse = new Promise<void>(resolve => {
-    slowServed = resolve
+    releaseSlow = resolve
   })
 
   // This relay replaces only Owlbear's transport. Each page runs the real app,
@@ -79,7 +83,10 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
     })
     await page.route("https://audio.test/**", async route => {
       const slow = route.request().url().endsWith("slow.wav")
-      if (slow) await new Promise(resolve => setTimeout(resolve, 400))
+      if (slow) {
+        requestSlow()
+        await slowResponse
+      }
       const data = wave()
       const range = route
         .request()
@@ -103,7 +110,6 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
           body: data.subarray(start, end + 1),
         })
         .catch(() => undefined)
-      if (slow) slowServed()
     })
     // Give both clients the same precise server clock. HTTP Date's usual
     // one-second precision would otherwise introduce unrelated test jitter.
@@ -179,23 +185,35 @@ test("room playback reaches a late player and synchronizes pause, seek, resume, 
       .toBeGreaterThan(4.2)
   }
 
-  await host.evaluate(async () => {
-    const moduleUrl = "/src/mb.ts"
-    const { play } = await import(moduleUrl)
-    void play({
-      title: "Slow old song",
-      url: "https://audio.test/slow.wav",
-      tags: [],
+  try {
+    await host.evaluate(async () => {
+      const moduleUrl = "/src/mb.ts"
+      const { play } = await import(moduleUrl)
+      void play({
+        title: "Slow replacement",
+        url: "https://audio.test/slow.wav",
+        tags: [],
+      })
     })
-    // Let the first metadata probe start before issuing the replacement.
-    await new Promise(resolve => setTimeout(resolve, 50))
-    await play({
-      title: "Newest song",
-      url: "https://audio.test/newest.wav",
-      tags: [],
+    await slowRequested
+    // Both clients stop the first song before a byte of the replacement arrives.
+    for (const page of [host, guest]) {
+      await expect
+        .poll(() => audioState(page))
+        .toMatchObject({ paused: true, source: "https://audio.test/slow.wav" })
+    }
+    await host.evaluate(async () => {
+      const moduleUrl = "/src/mb.ts"
+      const { play } = await import(moduleUrl)
+      await play({
+        title: "Newest song",
+        url: "https://audio.test/newest.wav",
+        tags: [],
+      })
     })
-  })
-  await slowResponse
+  } finally {
+    releaseSlow()
+  }
   for (const page of [host, guest]) {
     await expect
       .poll(async () => (await roomMessage(page))?.track.title)

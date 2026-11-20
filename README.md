@@ -12,7 +12,7 @@ A modified version of [hypergig/obr-tracks](https://github.com/hypergig/obr-trac
 
 - Add direct audio and YouTube video URLs, including bulk paste (`Title | URL`, one per line).
 - Edit titles, source URLs, tags, and loop start/end seconds. YouTube share timestamps are preserved as clip bounds.
-- Latest requested track wins; cancelled metadata requests cannot restart old tracks. Metadata probes time out, release resources, and cache up to 64 durations.
+- Selecting a track updates the room before the new media loads. Each player reads the duration from the selected source and releases the previous player.
 - Metadata-ready playback, explicit autoplay retry, seek controls, and visible playback errors.
 - Direct audio follows the shared room clock after a stall or background suspension, without repeatedly seeking while buffering. Late joiners, pause, resume, seek and track changes use the same room playback state.
 - Official visible YouTube iframe player with synchronized clips and local volume/mute.
@@ -51,6 +51,8 @@ Static hosting must serve `broadcast.html` as its own page rather than rewriting
 ## Tab audio
 
 The GM opens **Share tab audio**, then **Choose tab and start** in the popup. Select the music tab and enable **Share tab audio**. Players click **Listen to tab audio**: this explicitly unmutes playback and restores 30% volume if their volume was zero. If the browser blocks playback after connecting, click **Enable stream audio**. Volume and the mute button still work normally. Keep the source tab, popup, and Owlbear room open. Only audio is sent; the temporary captured video track is never added to the connection. Changing songs in the source tab does not rebuild the stream.
+
+Selecting a song from the room library ends the active tab broadcast and switches listeners to the selected track.
 
 ## Publishing updates
 

@@ -7,16 +7,18 @@ const APP_VERSION = JSON.parse(
 type AudioTestWindow = Window & {
   __obrMock: {
     actionHeight: number
+    receiveMetadata(metadata: Record<string, unknown>): void
     receiveBroadcast(
       channel: string,
       event: { data: unknown; connectionId: string },
     ): void
   }
   __captureOptions?: DisplayMediaStreamOptions
+  __capture?: MediaStream
   __level?: { context: AudioContext; analyser: AnalyserNode }
 }
 
-test("listener connection enables audible real WebRTC playback even when initially muted at zero volume", async ({
+test("listeners hear the tab stream and release it when the GM selects a library track", async ({
   context,
 }) => {
   await context.addInitScript(() => {
@@ -24,7 +26,8 @@ test("listener connection enables audible real WebRTC playback even when initial
     Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
       configurable: true,
       value: async (options: DisplayMediaStreamOptions) => {
-        (window as AudioTestWindow).__captureOptions = options
+        const browser = window as AudioTestWindow
+        browser.__captureOptions = options
         const canvas = document.createElement("canvas")
         canvas.width = 160
         canvas.height = 100
@@ -36,10 +39,12 @@ test("listener connection enables audible real WebRTC playback even when initial
         oscillator.connect(destination)
         oscillator.start()
         await audioContext.resume()
-        return new MediaStream([
+        const stream = new MediaStream([
           ...video.getVideoTracks(),
           ...destination.stream.getAudioTracks(),
         ])
+        browser.__capture = stream
+        return stream
       },
     })
     // Exercise recovery from autoplay denial after asynchronous negotiation.
@@ -68,6 +73,22 @@ test("listener connection enables audible real WebRTC playback even when initial
     { page: host, connectionId: "host" },
     { page: guest, connectionId: "guest" },
   ]
+  await context.route("https://audio.test/replacement.wav", route =>
+    route.fulfill({ status: 404 }),
+  )
+  await host.exposeFunction(
+    "__obrSetMetadata",
+    async (metadata: Record<string, unknown>) => {
+      await Promise.all(
+        clients.map(({ page }) =>
+          page.evaluate(value => {
+            const browser = window as AudioTestWindow
+            browser.__obrMock.receiveMetadata(value)
+          }, metadata),
+        ),
+      )
+    },
+  )
   for (const client of clients) {
     client.page.on("pageerror", error => errors.push(error.message))
     await client.page.exposeFunction("__obrGetPlayers", () => [
@@ -83,7 +104,8 @@ test("listener connection enables audible real WebRTC playback even when initial
             .map(target =>
               target.page.evaluate(
                 ({ channel, data, connectionId }) => {
-                  (window as AudioTestWindow).__obrMock.receiveBroadcast(
+                  const browser = window as AudioTestWindow
+                  browser.__obrMock.receiveBroadcast(
                     channel,
                     { data, connectionId },
                   )
@@ -189,11 +211,39 @@ test("listener connection enables audible real WebRTC playback even when initial
   await expect(streamAudio).toHaveJSProperty("muted", true)
   await guest.getByRole("button", { name: "Unmute audio", exact: true }).click()
   await expect(streamAudio).toHaveJSProperty("muted", false)
-  await guest.getByRole("button", { name: "Disconnect", exact: true }).click()
+  await host.evaluate(async () => {
+    const moduleUrl = "/src/mb.ts"
+    const { play } = await import(moduleUrl)
+    await play({
+      title: "Library replacement",
+      url: "https://audio.test/replacement.wav",
+      tags: [],
+    })
+  })
   await expect(streamAudio).toHaveJSProperty("srcObject", null)
-  await popup
-    .getByRole("button", { name: "Stop broadcast", exact: true })
-    .click()
+  await expect(
+    popup.getByRole("button", { name: "Stop broadcast", exact: true }),
+  ).toBeHidden()
+  await expect
+    .poll(() =>
+      popup.evaluate(
+        () =>
+          (window as AudioTestWindow).__capture
+            ?.getTracks()
+            .map(track => track.readyState),
+      ),
+    )
+    .toEqual(["ended", "ended"])
+  for (const page of [host, guest]) {
+    await expect(
+      page.getByText("Library replacement", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(
+        "Audio playback failed. Check the source link and try again.",
+      ),
+    ).toBeVisible()
+  }
   await guest.evaluate(
     () => (window as AudioTestWindow).__level?.context.close(),
   )

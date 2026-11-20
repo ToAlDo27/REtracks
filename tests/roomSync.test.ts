@@ -15,9 +15,6 @@ vi.mock("@owlbear-rodeo/sdk", () => ({
 }))
 vi.mock("../src/time", () => ({ now: () => new Date(Date.now()) }))
 vi.mock("../src/key", () => ({ key: (value: string) => value }))
-vi.mock("../src/audioMetadata", () => ({
-  getAudioDuration: vi.fn(() => Promise.resolve(120)),
-}))
 
 class ClientAudio extends EventTarget {
   src = ""

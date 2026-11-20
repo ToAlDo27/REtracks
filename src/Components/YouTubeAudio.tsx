@@ -1,5 +1,6 @@
 import { Alert, Box, Button, Stack, Typography } from "@mui/material"
 import { useEffect, useRef, useState } from "react"
+import type { Message } from "../mb"
 import { Action, getClipBounds, getMediaPosition } from "../playback"
 import {
   getYouTubeErrorMessage,
@@ -16,11 +17,31 @@ interface Props {
   mute: boolean
 }
 
-/** Visible official YouTube player. Media stays in YouTube's iframe. */
 export function YouTubeAudio(props: Props) {
-  const { ready, volume, mute } = props
   const message = useMessage()
-  const latest = useRef({ ...props, message })
+  const videoId = message && getYouTubeId(message.track.url)
+  if (!message || !videoId) return null
+  // A new source owns a new iframe. Delayed events from the old iframe
+  // cannot affect the new video. Transport controls keep the same iframe.
+  const source = `${videoId}:${message.track.start ?? 0}:${
+    message.track.end ?? ""
+  }`
+  return (
+    <YouTubePlayerView
+      key={source}
+      message={message}
+      videoId={videoId}
+      {...props}
+    />
+  )
+}
+
+/** Visible official YouTube player. Media stays in YouTube's iframe. */
+function YouTubePlayerView(
+  props: Props & { message: Message; videoId: string },
+) {
+  const { ready, volume, mute, message, videoId } = props
+  const latest = useRef({ ready, volume, mute, message })
   const previous = useRef({ ready, message })
   const host = useRef<HTMLDivElement>(null)
   const sync = useRef<(forceSeek?: boolean, userInitiated?: boolean) => void>(
@@ -45,7 +66,7 @@ export function YouTubeAudio(props: Props) {
     let disposed = false
     let player: YouTubePlayer | undefined
     let playerReady = false
-    let loadedSource = ""
+    let loadedSource = false
     let autoplayBlocked = false
     let playbackFailed = false
     let knownDuration = 0
@@ -65,32 +86,11 @@ export function YouTubeAudio(props: Props) {
     const synchronize = (forceSeek = false, userInitiated = false) => {
       if (!player || !playerReady || disposed) return
       const { message: current, ready } = latest.current
-      if (!current) {
-        player.pauseVideo()
-        return
-      }
-      const videoId = getYouTubeId(current.track.url)
-      if (!videoId) {
-        player.pauseVideo()
-        return
-      }
 
       applyVolume(player)
-      const sourceKey = `${videoId}:${current.track.start ?? 0}:${
-        current.track.end ?? ""
-      }`
-      const sourceChanged = sourceKey !== loadedSource
       const playing = current.action === Action.Play && (ready || userInitiated)
-      if (sourceChanged) {
-        // Stop the previous video before sending another asynchronous load command.
-        player.pauseVideo()
-        loadedSource = sourceKey
-        knownDuration = 0
-        setSourceDuration(0)
-        autoplayBlocked = false
-        playbackFailed = false
-        setBlocked(false)
-        setError(undefined)
+      if (!loadedSource) {
+        loadedSource = true
         const options = {
           videoId,
           startSeconds: getMediaPosition(current),
@@ -112,7 +112,13 @@ export function YouTubeAudio(props: Props) {
       const state = player.getPlayerState()
       // Let a stalled request finish buffering. Repeated automatic seeks here can
       // discard buffered data faster than a slow connection can download it.
-      if (state === 3 && playing && !forceSeek && !userInitiated) return
+      if (
+        (state === 3 || state === -1) &&
+        playing &&
+        !forceSeek &&
+        !userInitiated
+      )
+        return
       if ([0, 1, 2].includes(state)) {
         const duration = player.getDuration()
         if (
@@ -159,7 +165,7 @@ export function YouTubeAudio(props: Props) {
 
     loadYouTubeApi()
       .then(api => {
-        if (disposed || !hostElement) return
+        if (disposed || !hostElement?.isConnected) return
         const mount = document.createElement("div")
         hostElement.appendChild(mount)
         player = new api.Player(mount, {
@@ -221,7 +227,7 @@ export function YouTubeAudio(props: Props) {
     const interval = window.setInterval(() => {
       if (
         latest.current.ready &&
-        latest.current.message?.action === Action.Play &&
+        latest.current.message.action === Action.Play &&
         !autoplayBlocked &&
         !playbackFailed
       ) {
@@ -237,7 +243,7 @@ export function YouTubeAudio(props: Props) {
       player?.destroy()
       hostElement?.replaceChildren()
     }
-  }, [attempt])
+  }, [attempt, videoId])
 
   return (
     <Stack spacing={2}>
@@ -254,7 +260,7 @@ export function YouTubeAudio(props: Props) {
           {error}
         </Alert>
       )}
-      {(!props.ready || blocked) && message?.action === Action.Play && (
+      {(!ready || blocked) && message.action === Action.Play && (
         <Button
           disabled={!loaded}
           variant="outlined"

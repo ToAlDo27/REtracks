@@ -84,7 +84,10 @@ export function TrackProgress({ sourceDuration }: { sourceDuration?: number }) {
           value={Math.min(duration, scrubbing ?? progress)}
           onChange={(_, value) => setScrubbing(value as number)}
           onChangeCommitted={(_, value) => {
-            seek(value as number)
+            seek(value as number, {
+              id: currentMessage.id,
+              duration: mediaDuration,
+            })
             setScrubbing(undefined)
           }}
         />

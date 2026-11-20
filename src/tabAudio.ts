@@ -34,7 +34,7 @@ export function isTrustedTabBridgeMessage(
     !!event.data &&
     typeof event.data === "object" &&
     event.data.token === token &&
-    ["signal", "ping", "pong"].includes(event.data.type)
+    ["signal", "ping", "pong", "stop-capture"].includes(event.data.type)
   )
 }
 

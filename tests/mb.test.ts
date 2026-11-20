@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   setMetadata: vi.fn(() => Promise.resolve()),
   getMetadata: vi.fn(() => Promise.resolve({})),
   onMetadataChange: vi.fn(() => vi.fn()),
-  getAudioDuration: vi.fn(),
   notification: vi.fn(),
 }))
 vi.mock("@owlbear-rodeo/sdk", () => ({
@@ -19,9 +18,6 @@ vi.mock("@owlbear-rodeo/sdk", () => ({
 }))
 vi.mock("../src/time", () => ({ now: () => new Date("2026-01-01T00:00:00Z") }))
 vi.mock("../src/key", () => ({ key: (value: string) => value }))
-vi.mock("../src/audioMetadata", () => ({
-  getAudioDuration: mocks.getAudioDuration,
-}))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -119,67 +115,82 @@ describe("room playback requests", () => {
     unsubscribe()
   })
 
-  it("publishes only the newest track when metadata arrives out of order", async () => {
-    const first = deferred<number>()
-    const second = deferred<number>()
-    mocks.getAudioDuration
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise)
+  it("publishes the newest queued track without waiting for media metadata", async () => {
     const { play } = await import("../src/mb")
-    const a = play(track("first"))
-    const firstSignal = mocks.getAudioDuration.mock.calls[0][1] as AbortSignal
-    const b = play(track("second"))
-    expect(firstSignal.aborted).toBe(true)
-    second.resolve(60)
-    await b
-    first.resolve(100)
-    await a
+    await Promise.all([play(track("first")), play(track("second"))])
     expect(mocks.setMetadata).toHaveBeenCalledOnce()
     expect(mocks.setMetadata).toHaveBeenCalledWith({
       control: expect.objectContaining({
         track: track("second"),
-        duration: 60,
+        duration: 0,
+        selectionId: expect.any(String),
       }),
     })
   })
 
-  it.each(["stop", "pause"] as const)(
-    "%s cancels a loading track so late metadata cannot restart it",
-    async action => {
-      const pending = deferred<number>()
-      mocks.getAudioDuration.mockReturnValueOnce(pending.promise)
-      const controls = await import("../src/mb")
-      const loading = controls.play(track("slow"))
-      const signal = mocks.getAudioDuration.mock.calls[0][1] as AbortSignal
-      controls[action]()
-      expect(signal.aborted).toBe(true)
-      pending.resolve(90)
-      await loading
-      expect(
-        mocks.setMetadata.mock.calls.every(
-          ([data]) => data.control === undefined,
-        ),
-      ).toBe(true)
-    },
-  )
+  it("stop supersedes a queued selection while an older room write is still in flight", async () => {
+    const pending = deferred<void>()
+    mocks.setMetadata.mockReturnValueOnce(pending.promise)
+    const { play, stop } = await import("../src/mb")
+    const first = play(track("first"))
+    await vi.waitFor(() => expect(mocks.setMetadata).toHaveBeenCalledOnce())
+    const second = play(track("second"))
+    stop()
+    expect(mocks.setMetadata).toHaveBeenCalledOnce()
+    pending.resolve()
+    await Promise.all([first, second])
+    await vi.waitFor(() =>
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
+        control: undefined,
+      }),
+    )
+    expect(mocks.setMetadata).toHaveBeenCalledTimes(2)
+  })
 
-  it("publishes YouTube without attempting to load the video as an audio file", async () => {
+  it("pauses the newly selected track instead of restoring the previous one", async () => {
+    const { play, pause, resume, Action } = await import("../src/mb")
+    await play(track("first"))
+    const replacement = play(track("second"))
+    pause()
+    await replacement
+    await vi.waitFor(() =>
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
+        control: expect.objectContaining({
+          track: track("second"),
+          action: Action.Pause,
+        }),
+      }),
+    )
+    const paused = mocks.setMetadata.mock.calls.at(-1)?.[0].control
+    resume()
+    await vi.waitFor(() =>
+      expect(mocks.setMetadata).toHaveBeenLastCalledWith({
+        control: expect.objectContaining({
+          track: track("second"),
+          action: Action.Play,
+          selectionId: paused.selectionId,
+        }),
+      }),
+    )
+  })
+
+  it("publishes the normalized YouTube selection with the same room playback format", async () => {
     const { play } = await import("../src/mb")
     const youtube = {
       ...track("video"),
       url: "https://www.youtube.com/watch?v=abcdefghijk",
     }
     await play(youtube)
-    expect(mocks.getAudioDuration).not.toHaveBeenCalled()
     expect(mocks.setMetadata).toHaveBeenCalledWith({
       control: expect.objectContaining({ track: youtube, duration: 0 }),
     })
   })
 
-  it("surfaces probe errors as rejected promises callers can display", async () => {
-    mocks.getAudioDuration.mockRejectedValueOnce(new Error("Broken link"))
+  it("rejects malformed links without changing the room selection", async () => {
     const { play } = await import("../src/mb")
-    await expect(play(track("broken"))).rejects.toThrow("Broken link")
+    await expect(play({ ...track("broken"), url: "broken" })).rejects.toThrow(
+      "Invalid url",
+    )
     expect(mocks.setMetadata).not.toHaveBeenCalled()
   })
 })

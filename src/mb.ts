@@ -1,17 +1,10 @@
 import OBR, { Metadata } from "@owlbear-rodeo/sdk"
 import { v4 as uuidv4 } from "uuid"
-import { getAudioDuration } from "./audioMetadata"
 import { key } from "./key"
 import { now } from "./time"
 import { Track } from "./track"
 import { checkTrack, convertToDirectDownloadable } from "./utils"
-import {
-  Action,
-  getClipBounds,
-  getClipDuration,
-  getPlaybackPosition,
-} from "./playback"
-import { getYouTubeId } from "./youtubeUrl"
+import { Action, getClipDuration, getPlaybackPosition } from "./playback"
 
 export { Action } from "./playback"
 
@@ -19,6 +12,7 @@ const path = key("control")
 
 export interface Message {
   id: string
+  selectionId?: string
   time: Date
   action: Action
   offset: number
@@ -26,50 +20,25 @@ export interface Message {
   track: Track
 }
 
-function newPlayMessage(track: Track, duration: number): Message {
+function newPlayMessage(track: Track): Message {
+  const id = uuidv4()
   return {
-    id: uuidv4(),
+    id,
+    selectionId: id,
     time: now(),
     action: Action.Play,
     offset: 0,
-    duration: duration,
-    track: track,
+    duration: 0,
+    track,
   }
 }
 
-function pauseCurrentMessage(): Message {
-  if (!currentMessage) {
-    throw new Error("Unable to pause before receiving first message")
-  }
-
-  const m = newPlayMessage(currentMessage.track, currentMessage.duration)
-  m.action = Action.Pause
-  m.offset = getPlaybackPosition(currentMessage)
-  return m
-}
-
-function resumeCurrentMessage(): Message {
-  if (!currentMessage) {
-    throw new Error("Unable to resume before receiving first message")
-  }
-
-  const m = newPlayMessage(currentMessage.track, currentMessage.duration)
-  m.action = Action.Play
-  m.offset = currentMessage.offset
-  return m
-}
-
-// message cache
 let currentMessage: Message | undefined = undefined
-let requestId = 0
-let pendingProbe: AbortController | undefined
+let pendingWrite: { message: Message | undefined } | undefined
 let metadataWrites = Promise.resolve()
 
-function cancelPending() {
-  requestId += 1
-  pendingProbe?.abort()
-  pendingProbe = undefined
-  return requestId
+function messageToControl() {
+  return pendingWrite ? pendingWrite.message : currentMessage
 }
 
 function report(error: unknown) {
@@ -80,19 +49,22 @@ function report(error: unknown) {
   )
 }
 
-// Serial writes prevent an earlier in-flight room update from overtaking a newer one.
-function publish(message: Message | undefined, request: number) {
-  const write = metadataWrites.then(async () => {
-    if (request !== requestId) return
-    const previous = currentMessage
-    currentMessage = message
-    try {
+// Skip superseded commands waiting to be sent. An in-flight write must
+// settle before the next write so its response cannot restore an older track.
+function publish(message: Message | undefined) {
+  const pending = { message }
+  pendingWrite = pending
+  const write = metadataWrites
+    .then(async () => {
+      if (pendingWrite !== pending) return
+      const previous = currentMessage
       await OBR.room.setMetadata({ [path]: message })
-    } catch (error) {
-      if (request === requestId) currentMessage = previous
-      throw error
-    }
-  })
+      // The subscription may already have delivered this write or a newer one.
+      if (currentMessage === previous) currentMessage = message
+    })
+    .finally(() => {
+      if (pendingWrite === pending) pendingWrite = undefined
+    })
   metadataWrites = write.catch(() => undefined)
   return write
 }
@@ -100,10 +72,13 @@ function publish(message: Message | undefined, request: number) {
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== "object") return false
 
-  const { id, time, action, offset, duration, track } = value as Message
+  const { id, selectionId, time, action, offset, duration, track } =
+    value as Message
   if (
     typeof id !== "string" ||
     !id ||
+    (selectionId !== undefined &&
+      (typeof selectionId !== "string" || !selectionId)) ||
     !(
       typeof time === "string" ||
       typeof time === "number" ||
@@ -185,8 +160,6 @@ export function onMessage(
 }
 
 export async function play(track: Track): Promise<void> {
-  const request = cancelPending()
-
   // validate the track
   const { fixed, validation } = checkTrack(track)
   if (validation) {
@@ -195,60 +168,52 @@ export async function play(track: Track): Promise<void> {
 
   // convert url into direct downloadable if applicable
   fixed.url = convertToDirectDownloadable(fixed.url)
-
-  if (getYouTubeId(fixed.url)) {
-    await publish(newPlayMessage(fixed, 0), request)
-    return
-  }
-
-  const controller = new AbortController()
-  pendingProbe = controller
-  try {
-    const duration = await getAudioDuration(fixed.url, controller.signal)
-    if (request !== requestId) return
-    const bounds = getClipBounds(fixed, duration)
-    if (duration > 0 && bounds.duration <= 0) {
-      throw new Error(
-        "The clip starts after the end of this audio. Edit its start time.",
-      )
-    }
-    await publish(newPlayMessage(fixed, duration), request)
-  } catch (error) {
-    if (controller.signal.aborted) return
-    throw error
-  } finally {
-    if (pendingProbe === controller) pendingProbe = undefined
-  }
+  // Set the room's selection before the new media loads. Each player reads
+  // its own media duration and the old source can stop even for broken links.
+  await publish(newPlayMessage(fixed))
 }
 
 export function pause() {
-  const request = cancelPending()
-  if (currentMessage) void publish(pauseCurrentMessage(), request).catch(report)
+  const message = messageToControl()
+  if (!message) return
+  void publish({
+    ...message,
+    id: uuidv4(),
+    time: now(),
+    action: Action.Pause,
+    offset: getPlaybackPosition(message),
+  }).catch(report)
 }
 
 export function resume() {
-  const request = cancelPending()
-  if (currentMessage)
-    void publish(resumeCurrentMessage(), request).catch(report)
+  const message = messageToControl()
+  if (!message) return
+  void publish({
+    ...message,
+    id: uuidv4(),
+    time: now(),
+    action: Action.Play,
+  }).catch(report)
 }
 
 export function stop() {
-  const request = cancelPending()
-  void publish(undefined, request).catch(report)
+  void publish(undefined).catch(report)
 }
 
 /** Seek within the selected clip and broadcast the new position to the room. */
-export function seek(seconds: number) {
-  if (!currentMessage || !Number.isFinite(seconds)) return
-  const request = cancelPending()
-  const duration = getClipDuration(
-    currentMessage.track,
-    currentMessage.duration,
-  )
+export function seek(
+  seconds: number,
+  observed?: { id: string; duration: number },
+) {
+  const current = messageToControl()
+  if (!current || !Number.isFinite(seconds)) return
+  if (observed && current.id !== observed.id) return
+  const sourceDuration = observed?.duration || current.duration
+  const duration = getClipDuration(current.track, sourceDuration)
   const offset = Math.max(
     0,
     duration > 0 ? Math.min(seconds, Math.max(0, duration - 0.01)) : seconds,
   )
-  const message = { ...currentMessage, id: uuidv4(), time: now(), offset }
-  void publish(message, request).catch(report)
+  const message = { ...current, id: uuidv4(), time: now(), offset }
+  void publish(message).catch(report)
 }

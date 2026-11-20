@@ -27,6 +27,12 @@ export function BroadcastWindow() {
   const lastBridge = useRef(Date.now())
   const captureRequest = useRef(0)
   const mounted = useRef(false)
+  function stopCapture() {
+    captureRequest.current += 1
+    peer.current?.stopBroadcast()
+    setActive(false)
+    setPending(false)
+  }
   useEffect(() => {
     mounted.current = true
     const parent = opener.current
@@ -51,6 +57,7 @@ export function BroadcastWindow() {
         return
       if (event.data?.type === "signal" && isTabSignal(event.data.signal))
         void instance.receive(event.data.signal)
+      if (event.data?.type === "stop-capture") stopCapture()
       if (event.data?.type === "ping") {
         lastBridge.current = Date.now()
         post({ type: "pong" })
@@ -60,10 +67,7 @@ export function BroadcastWindow() {
     post({ type: "pong" })
     const timer = setInterval(() => {
       if (Date.now() - lastBridge.current > 15000) {
-        captureRequest.current += 1
-        instance.stopBroadcast()
-        setActive(false)
-        setPending(false)
+        stopCapture()
         setError(
           `The Owlbear connection closed. Reopen Share tab audio in ${APP_NAME}.`,
         )
@@ -182,14 +186,7 @@ export function BroadcastWindow() {
           Choose tab and start
         </Button>
         {active && (
-          <Button
-            color="error"
-            variant="outlined"
-            onClick={() => {
-              peer.current?.stopBroadcast()
-              setActive(false)
-            }}
-          >
+          <Button color="error" variant="outlined" onClick={stopCapture}>
             Stop broadcast
           </Button>
         )}

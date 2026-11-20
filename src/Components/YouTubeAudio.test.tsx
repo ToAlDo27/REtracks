@@ -82,12 +82,16 @@ describe("YouTube playback lifecycle", () => {
     vi.clearAllMocks()
   })
 
+  async function readyLastPlayer() {
+    const player = FakePlayer.instances.at(-1)!
+    await act(async () => player.options.events.onReady({ target: player }))
+    return player
+  }
+
   async function renderPlayer() {
     await act(async () => root.render(<YouTubeAudio {...props} />))
     await act(async () => resolveApi({ Player: FakePlayer }))
-    const player = FakePlayer.instances[0]
-    await act(async () => player.options.events.onReady({ target: player }))
-    return player
+    return readyLastPlayer()
   }
 
   it("loads only the newest track when switching before the API is ready", async () => {
@@ -103,7 +107,7 @@ describe("YouTube playback lifecycle", () => {
     )
   })
 
-  it("reuses the iframe, stops the previous source, and does not seek on volume changes", async () => {
+  it("removes the old iframe before the next video is ready and ignores its late events", async () => {
     const player = await renderPlayer()
     player.seekTo.mockClear()
     await act(async () => root.render(<YouTubeAudio {...props} volume={0.8} />))
@@ -112,30 +116,42 @@ describe("YouTube playback lifecycle", () => {
 
     state.message = makeMessage("M7lc1UVf-VE")
     await act(async () => root.render(<YouTubeAudio {...props} />))
-    expect(FakePlayer.instances).toHaveLength(1)
-    expect(player.loadVideoById).toHaveBeenLastCalledWith(
+    expect(player.destroy).toHaveBeenCalledOnce()
+    expect(player.iframe.isConnected).toBe(false)
+    expect(container.querySelectorAll("iframe")).toHaveLength(1)
+    expect(FakePlayer.instances).toHaveLength(2)
+    await act(async () => {
+      player.options.events.onStateChange({ target: player, data: 0 })
+      player.options.events.onError({ target: player, data: 150 })
+      player.options.events.onAutoplayBlocked({ target: player })
+    })
+    expect(player.playVideo).not.toHaveBeenCalled()
+    expect(player.loadVideoById).toHaveBeenCalledOnce()
+    expect(container.textContent).not.toContain("YouTube error 150")
+    expect(container.textContent).not.toContain("Play YouTube on this device")
+    const replacement = await readyLastPlayer()
+    expect(replacement.loadVideoById).toHaveBeenCalledOnce()
+    expect(replacement.loadVideoById).toHaveBeenCalledWith(
       expect.objectContaining({ videoId: "M7lc1UVf-VE" }),
     )
-    expect(player.pauseVideo.mock.invocationCallOrder.at(-1)).toBeLessThan(
-      player.loadVideoById.mock.invocationCallOrder.at(-1)!,
-    )
-    expect(player.getIframe().style.minHeight).toBe("200px")
+    expect(replacement.getIframe().style.minHeight).toBe("200px")
   })
 
   it("pauses and seeks within a clip without restarting during timer ticks", async () => {
+    state.message = {
+      ...state.message!,
+      track: { ...state.message!.track, start: 10, end: 30 },
+    }
     const player = await renderPlayer()
     state.message = {
       ...state.message!,
       action: Action.Pause,
       offset: 5,
-      track: { ...state.message!.track, start: 10, end: 30 },
     }
     await act(async () => root.render(<YouTubeAudio {...props} />))
-    expect(player.cueVideoById).toHaveBeenLastCalledWith({
-      videoId: "dQw4w9WgXcQ",
-      startSeconds: 15,
-      endSeconds: 30,
-    })
+    expect(FakePlayer.instances).toHaveLength(1)
+    expect(player.seekTo).toHaveBeenLastCalledWith(15, true)
+    expect(player.pauseVideo).toHaveBeenCalled()
     player.playVideo.mockClear()
     await act(async () => vi.advanceTimersByTime(3000))
     expect(player.playVideo).not.toHaveBeenCalled()
@@ -199,7 +215,8 @@ describe("YouTube playback lifecycle", () => {
     state.message = makeMessage("M7lc1UVf-VE")
     await act(async () => root.render(<YouTubeAudio {...props} />))
     expect(container.textContent).not.toContain("YouTube error 150")
-    expect(player.loadVideoById).toHaveBeenLastCalledWith(
+    const replacement = await readyLastPlayer()
+    expect(replacement.loadVideoById).toHaveBeenLastCalledWith(
       expect.objectContaining({ videoId: "M7lc1UVf-VE" }),
     )
   })

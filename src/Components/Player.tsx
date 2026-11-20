@@ -37,7 +37,7 @@ export function Player(props: Props) {
         {currentMessage && getYouTubeId(currentMessage.track.url) ? (
           <YouTubeAudio {...props} />
         ) : (
-          <Audio {...props} />
+          <Audio key={currentMessage?.track.url} {...props} />
         )}
       </CardContent>
     </Card>

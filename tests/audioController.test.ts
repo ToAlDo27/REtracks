@@ -79,6 +79,43 @@ describe("direct audio synchronization", () => {
     expect(audio.play).toHaveBeenCalledOnce()
   })
 
+  it("reports a clip beyond the source without starting playback", () => {
+    const error = vi.fn()
+    syncAudio(
+      audio as unknown as HTMLAudioElement,
+      { ...base, track: { ...base.track, start: 100, end: 120 } },
+      true,
+      error,
+    )
+    audio.metadata()
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("starts after the end"),
+      }),
+    )
+  })
+
+  it("times out if the new source never returns its metadata", () => {
+    const error = vi.fn()
+    const dispose = syncAudio(
+      audio as unknown as HTMLAudioElement,
+      base,
+      true,
+      error,
+    )
+    vi.advanceTimersByTime(15000)
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("timed out"),
+      }),
+    )
+    audio.metadata()
+    expect(audio.play).not.toHaveBeenCalled()
+    dispose()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it("removes stale listeners when tracks are switched rapidly", () => {
     const dispose = syncAudio(
       audio as unknown as HTMLAudioElement,
