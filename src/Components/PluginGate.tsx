@@ -1,7 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk"
 import React, { useEffect, useState } from "react"
 import { Alert, Box, Button, Link, Stack, Typography } from "@mui/material"
-import { APP_NAME, SOURCE_CODE_URL } from "../project"
+import { APP_NAME, APP_VERSION, SOURCE_CODE_URL } from "../project"
 import { ReleaseNotes } from "./ReleaseNotes"
 
 /**
@@ -22,7 +22,10 @@ export function PluginGate({ children }: { children: React.ReactNode }) {
   if (ready) {
     return <>{children}</>
   } else if (!OBR.isAvailable) {
-    const manifest = new URL("manifest.json", location.href).href
+    const manifestFile = import.meta.env.PROD
+      ? `manifest-v${APP_VERSION}.json`
+      : "manifest.json"
+    const manifest = new URL(manifestFile, location.href).href
     return (
       <Box sx={{ maxWidth: 600, mx: "auto", p: 4 }}>
         <Stack spacing={3}>

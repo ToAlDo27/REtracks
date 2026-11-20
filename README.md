@@ -8,6 +8,8 @@ A modified version of [hypergig/obr-tracks](https://github.com/hypergig/obr-trac
 
 **Install link:** [ReTracks manifest](https://toaldo27.github.io/REtracks/manifest.json). Add this URL in Owlbear Rodeo → Extras → Extensions → Add custom extension.
 
+If the installer still shows an older version, copy the release-specific install URL from the ReTracks site. Install URLs from previous releases continue to serve the current version.
+
 ## Changes
 
 - Add direct audio and YouTube video URLs, including bulk paste (`Title | URL`, one per line).

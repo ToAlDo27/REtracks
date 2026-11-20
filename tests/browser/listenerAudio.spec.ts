@@ -105,10 +105,10 @@ test("listeners hear the tab stream and release it when the GM selects a library
               target.page.evaluate(
                 ({ channel, data, connectionId }) => {
                   const browser = window as AudioTestWindow
-                  browser.__obrMock.receiveBroadcast(
-                    channel,
-                    { data, connectionId },
-                  )
+                  browser.__obrMock.receiveBroadcast(channel, {
+                    data,
+                    connectionId,
+                  })
                 },
                 { channel, data, connectionId: client.connectionId },
               ),
@@ -127,6 +127,7 @@ test("listeners hear the tab stream and release it when the GM selects a library
   await popup
     .getByRole("button", { name: "Choose tab and start", exact: true })
     .click()
+  expect(new URL(popup.url()).searchParams.get("v")).toBe(APP_VERSION)
   const options = await popup.evaluate(
     () => (window as AudioTestWindow).__captureOptions,
   )

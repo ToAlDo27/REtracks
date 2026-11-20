@@ -3,6 +3,7 @@ import { Alert, Box, Button, Stack, Typography } from "@mui/material"
 import OBR from "@owlbear-rodeo/sdk"
 import { useEffect, useRef, useState } from "react"
 import { key } from "../key"
+import { APP_VERSION } from "../project"
 import {
   TabAudioPeer,
   TabAudioState,
@@ -245,6 +246,7 @@ export function TabBroadcast({
     bridgeToken.current = token
     lastPong.current = Date.now()
     const url = new URL("broadcast.html", window.location.href)
+    url.searchParams.set("v", APP_VERSION)
     url.hash = token
     popup.current = window.open(
       url.href,

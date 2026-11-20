@@ -16,16 +16,31 @@ export default defineConfig(({ mode }) => {
         name: "extension-manifest",
         generateBundle() {
           const manifest = JSON.parse(
-            readFileSync(new URL("./public/manifest.json", import.meta.url), "utf8"),
+            readFileSync(
+              new URL("./public/manifest.json", import.meta.url),
+              "utf8",
+            ),
           )
-          manifest.icon = `${base}music-icon.svg`
-          manifest.action.icon = `${base}music-action.svg`
-          manifest.action.popover = base
-          this.emitFile({
-            type: "asset",
-            fileName: "manifest.json",
-            source: `${JSON.stringify(manifest, null, 2)}\n`,
-          })
+          const version = `?v=${encodeURIComponent(manifest.version)}`
+          manifest.icon = `${base}music-icon.svg${version}`
+          manifest.action.icon = `${base}music-action.svg${version}`
+          manifest.action.popover = `${base}${version}`
+
+          const releases: { version: string }[] = JSON.parse(
+            readFileSync(
+              new URL("./src/releases.json", import.meta.url),
+              "utf8",
+            ),
+          )
+          const source = `${JSON.stringify(manifest, null, 2)}\n`
+          const installFiles = [
+            "manifest.json",
+            // Keep older install links working and serving the current release.
+            ...releases.map(release => `manifest-v${release.version}.json`),
+          ]
+          for (const fileName of installFiles) {
+            this.emitFile({ type: "asset", fileName, source })
+          }
         },
       },
     ],
